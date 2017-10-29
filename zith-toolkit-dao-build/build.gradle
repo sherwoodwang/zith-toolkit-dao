@@ -1,0 +1,29 @@
+apply plugin: 'java'
+apply plugin: 'antlr'
+apply plugin: 'maven-publish'
+
+sourceCompatibility = 1.8
+
+dependencies {
+    compile project(':zith-toolkit-dao')
+
+    // https://mvnrepository.com/artifact/com.squareup/javapoet
+    compile group: 'com.squareup', name: 'javapoet', version: libraryVersions.javapoet
+
+    // https://mvnrepository.com/artifact/com.google.guava/guava
+    compile group: 'com.google.guava', name: 'guava', version: libraryVersions.guava
+
+    // https://mvnrepository.com/artifact/org.antlr/antlr4
+    antlr group: 'org.antlr', name: 'antlr4', version: libraryVersions.antlr
+    compile group: 'org.antlr', name: 'antlr4', version: libraryVersions.antlr
+
+    testCompile group: 'junit', name: 'junit', version: libraryVersions.junit
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}

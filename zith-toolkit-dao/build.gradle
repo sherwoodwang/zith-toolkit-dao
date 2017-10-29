@@ -1,0 +1,17 @@
+apply plugin: 'java'
+apply plugin: 'maven-publish'
+
+sourceCompatibility = 1.8
+
+dependencies {
+    // https://mvnrepository.com/artifact/org.springframework/spring-jdbc
+    compileOnly group: 'org.springframework', name: 'spring-jdbc', version: libraryVersions.spring
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}

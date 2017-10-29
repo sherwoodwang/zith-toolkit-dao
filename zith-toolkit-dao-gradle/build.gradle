@@ -1,0 +1,18 @@
+apply plugin: 'groovy'
+apply plugin: 'maven-publish'
+
+sourceCompatibility = 1.8
+
+dependencies {
+    compile project(':zith-toolkit-dao-build')
+    compile localGroovy()
+    compile gradleApi()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}
