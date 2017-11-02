@@ -23,69 +23,53 @@ public class DaoRecordCrudOperations<T> {
     private final List<DaoSqlColumn<T, ?>> dataColumns;
     private final DaoRecordRowMapper<T> rowMapper;
 
-    private final String createSql;
-    private final String readSql;
-    private final String updateSql;
-    private final String deleteSql;
+    private final String sqlCreate;
+    private final String sqlRead;
+    private final String sqlUpdate;
+    private final String sqlDelete;
 
     protected DaoRecordCrudOperations(Template<T> template) {
-        this.jdbcTemplate = template.jdbcTemplate;
-        this.table = template.table;
-        this.daoSqlTupleType = template.daoSqlTupleType;
+        this.jdbcTemplate = template.getJdbcTemplate();
+        this.table = template.getTable();
+        this.daoSqlTupleType = template.getDaoSqlTupleType();
 
-        this.idColumns = template.idColumns;
-        this.dataColumns = template.dataColumns;
-        this.rowMapper = template.rowMapper;
+        this.idColumns = template.getIdColumns();
+        this.dataColumns = template.getDataColumns();
+        this.rowMapper = template.getRowMapper();
 
-        createSql = template.sqlCreate;
-        readSql = template.sqlRead;
-        updateSql = template.sqlUpdate;
-        deleteSql = template.sqlDelete;
+        sqlCreate = template.getSqlCreate();
+        sqlRead = template.getSqlRead();
+        sqlUpdate = template.getSqlUpdate();
+        sqlDelete = template.getSqlDelete();
     }
 
-    public JdbcTemplate getJdbcTemplate() {
+    protected final JdbcTemplate getJdbcTemplate() {
         return jdbcTemplate;
     }
 
-    public String getTable() {
+    protected final String getTable() {
         return table;
     }
 
-    public DaoSqlTupleType<T> getDaoSqlTupleType() {
+    protected final DaoSqlTupleType<T> getDaoSqlTupleType() {
         return daoSqlTupleType;
     }
 
-    public List<DaoSqlColumn<T, ?>> getIdColumns() {
+    protected final List<DaoSqlColumn<T, ?>> getIdColumns() {
         return idColumns;
     }
 
-    public List<DaoSqlColumn<T, ?>> getDataColumns() {
+    protected final List<DaoSqlColumn<T, ?>> getDataColumns() {
         return dataColumns;
     }
 
-    public DaoRecordRowMapper<T> getRowMapper() {
+    protected final DaoRecordRowMapper<T> getRowMapper() {
         return rowMapper;
-    }
-
-    public String getCreateSql() {
-        return createSql;
-    }
-
-    public String getReadSql() {
-        return readSql;
-    }
-
-    public String getUpdateSql() {
-        return updateSql;
-    }
-
-    public String getDeleteSql() {
-        return deleteSql;
     }
 
     public void create(T record) {
         getJdbcTemplate().update(
-                getCreateSql(),
+                sqlCreate,
                 Stream.concat(
                         getIdColumns().stream(),
                         getDataColumns().stream()
@@ -106,7 +90,7 @@ public class DaoRecordCrudOperations<T> {
         checkIdComponents(idComponents);
 
         return getJdbcTemplate().queryForObject(
-                getReadSql(),
+                sqlRead,
                 IntStream.range(0, getIdColumns().size()).boxed()
                         .map(i -> convertToNativeValue(getIdColumns().get(i).getTypeHandler(), idComponents[i]))
                         .toArray(),
@@ -120,7 +104,7 @@ public class DaoRecordCrudOperations<T> {
 
     public void read(T record) {
         T refreshedRecord = getJdbcTemplate().queryForObject(
-                getReadSql(),
+                sqlRead,
                 getIdColumns().stream()
                         .map(c -> getAsNativeValue(c, record))
                         .toArray(),
@@ -135,8 +119,8 @@ public class DaoRecordCrudOperations<T> {
     }
 
     public void update(T record) {
-        getJdbcTemplate().update(
-                getUpdateSql(),
+        int count = getJdbcTemplate().update(
+                sqlUpdate,
                 Stream.concat(
                         getDataColumns().stream(),
                         getIdColumns().stream()
@@ -151,13 +135,17 @@ public class DaoRecordCrudOperations<T> {
                         .mapToInt(DaoSqlTypeHandler::getJdbcType)
                         .toArray()
         );
+
+        if (count != 1) {
+            throw new IncorrectResultSizeDataAccessException(1, count);
+        }
     }
 
     public void delete(Object... idComponents) {
         checkIdComponents(idComponents);
 
-        int c = getJdbcTemplate().update(
-                getDeleteSql(),
+        int count = getJdbcTemplate().update(
+                sqlDelete,
                 IntStream.range(0, getIdColumns().size()).boxed()
                         .map(i -> convertToNativeValue(getIdColumns().get(i).getTypeHandler(), idComponents[i]))
                         .toArray(),
@@ -167,14 +155,14 @@ public class DaoRecordCrudOperations<T> {
                         .toArray()
         );
 
-        if (c != 1) {
-            throw new IncorrectResultSizeDataAccessException(1, c);
+        if (count != 1) {
+            throw new IncorrectResultSizeDataAccessException(1, count);
         }
     }
 
     public void delete(T record) {
         int count = getJdbcTemplate().update(
-                getDeleteSql(),
+                sqlDelete,
                 getIdColumns().stream()
                         .map(c -> getAsNativeValue(c, record))
                         .toArray(),
@@ -189,7 +177,7 @@ public class DaoRecordCrudOperations<T> {
         }
     }
 
-    private void checkIdComponents(Object[] idComponents) {
+    protected void checkIdComponents(Object[] idComponents) {
         if (getIdColumns().size() != idComponents.length) {
             throw new IllegalArgumentException(String.format(
                     "Unmatched number of id components, expected: %d, actual: %d",
@@ -353,18 +341,18 @@ public class DaoRecordCrudOperations<T> {
         }
 
         private String buildSqlCreate() {
-            return "INSERT INTO " + table + " (" +
+            return "INSERT INTO " + getTable() + " (" +
                     Stream.concat(
-                            idColumns.stream(),
-                            dataColumns.stream()
+                            getIdColumns().stream(),
+                            getDataColumns().stream()
                     )
                             .map(DaoSqlColumn::getColumnName)
                             .map(this::quoteSqlName)
                             .collect(Collectors.joining(", ")) +
                     ") VALUES (" +
                     Stream.concat(
-                            idColumns.stream(),
-                            dataColumns.stream()
+                            getIdColumns().stream(),
+                            getDataColumns().stream()
                     )
                             .map(__ -> "?")
                             .collect(Collectors.joining(", ")) +
@@ -373,12 +361,12 @@ public class DaoRecordCrudOperations<T> {
 
         private String buildSqlRead() {
             return "SELECT " +
-                    daoSqlTupleType.columns().all().stream()
+                    getDaoSqlTupleType().columns().all().stream()
                             .map(DaoSqlColumn::getColumnName)
                             .map(this::quoteSqlName)
                             .collect(Collectors.joining(", ")) +
-                    " FROM " + table + " WHERE " +
-                    idColumns.stream()
+                    " FROM " + getTable() + " WHERE " +
+                    getIdColumns().stream()
                             .map(DaoSqlColumn::getColumnName)
                             .map(this::quoteSqlName)
                             .map(c -> c + "=?")
@@ -386,14 +374,14 @@ public class DaoRecordCrudOperations<T> {
         }
 
         private String buildSqlUpdate() {
-            return "UPDATE " + table + " SET " +
-                    dataColumns.stream()
+            return "UPDATE " + getTable() + " SET " +
+                    getDataColumns().stream()
                             .map(DaoSqlColumn::getColumnName)
                             .map(this::quoteSqlName)
                             .map(c -> c + "=?")
                             .collect(Collectors.joining(", ")) +
                     " WHERE " +
-                    idColumns.stream()
+                    getIdColumns().stream()
                             .map(DaoSqlColumn::getColumnName)
                             .map(this::quoteSqlName)
                             .map(c -> c + "=?")
@@ -401,8 +389,8 @@ public class DaoRecordCrudOperations<T> {
         }
 
         private String buildSqlDelete() {
-            return "DELETE FROM " + table + " WHERE " +
-                    idColumns.stream()
+            return "DELETE FROM " + getTable() + " WHERE " +
+                    getIdColumns().stream()
                             .map(DaoSqlColumn::getColumnName)
                             .map(this::quoteSqlName)
                             .map(c -> c + "=?")
