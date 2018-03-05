@@ -3,7 +3,7 @@
 /.idea
 /out/
 /*/out/
-
+*.iml
 
 ### Java template
 # Compiled class file

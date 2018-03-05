@@ -49,6 +49,7 @@ public class SqlTypeHandlerDeclaration {
         return new Builder();
     }
 
+    @SuppressWarnings("UnusedReturnValue")
     public static class Builder {
         private String name;
         private String type;
@@ -74,22 +75,16 @@ public class SqlTypeHandlerDeclaration {
             return this;
         }
 
-        public Builder addTypeSelectors(List<TypeSelector> typeSelectors) {
-            if (this.typeSelectors == null) {
-                this.typeSelectors = new LinkedList<>();
-            }
-
-            this.typeSelectors.addAll(typeSelectors);
-
-            return this;
-        }
-
         public SqlTypeHandlerDeclaration build() {
             if (this.typeSelectors == null) {
                 this.typeSelectors = new LinkedList<>();
             }
 
             return new SqlTypeHandlerDeclaration(name, typeSelectors, type);
+        }
+
+        public String getType() {
+            return type;
         }
     }
 

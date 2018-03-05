@@ -1,7 +1,7 @@
 apply plugin: 'java'
 apply plugin: 'maven-publish'
 
-sourceCompatibility = 1.8
+sourceCompatibility = 9
 
 dependencies {
     // https://mvnrepository.com/artifact/org.springframework/spring-jdbc

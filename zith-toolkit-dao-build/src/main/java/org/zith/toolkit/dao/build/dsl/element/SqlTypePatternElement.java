@@ -1,4 +1,4 @@
-package org.zith.toolkit.dao.build.dsl.parser;
+package org.zith.toolkit.dao.build.dsl.element;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class SqlTypePatternElement {
 
@@ -28,5 +29,28 @@ public class SqlTypePatternElement {
 
     public Map<String, ?> getParameters() {
         return parameters;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        SqlTypePatternElement that = (SqlTypePatternElement) o;
+        return Objects.equals(sqlType, that.sqlType) &&
+                Objects.equals(parameters, that.parameters);
+    }
+
+    @Override
+    public int hashCode() {
+
+        return Objects.hash(sqlType, parameters);
+    }
+
+    @Override
+    public String toString() {
+        return "SqlTypePatternElement{" +
+                "sqlType=" + sqlType +
+                ", parameters=" + parameters +
+                '}';
     }
 }

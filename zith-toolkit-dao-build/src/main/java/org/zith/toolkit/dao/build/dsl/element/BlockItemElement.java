@@ -1,27 +1,27 @@
-package org.zith.toolkit.dao.build.dsl.parser;
+package org.zith.toolkit.dao.build.dsl.element;
 
 import java.util.Objects;
 
 public class BlockItemElement {
     private final Type type;
     private final PackageScopeElement packageScopeElement;
-    private final TupleElement tupleElement;
+    private final SqlTupleElement sqlTupleElement;
     private final DeclarationElement declarationElement;
     private final SqlTypeDictionaryElement sqlTypeDictionaryElement;
-    private UtilizationElement utilizationElement;
+    private final UtilizationElement utilizationElement;
 
     public BlockItemElement(PackageScopeElement packageScopeElement) {
         type = Type.PACKAGE_SCOPE;
         this.packageScopeElement = Objects.requireNonNull(packageScopeElement);
-        tupleElement = null;
+        sqlTupleElement = null;
         declarationElement = null;
         utilizationElement = null;
         sqlTypeDictionaryElement = null;
     }
 
-    public BlockItemElement(TupleElement tupleElement) {
-        type = Type.RECORD_DEFINITION;
-        this.tupleElement = Objects.requireNonNull(tupleElement);
+    public BlockItemElement(SqlTupleElement sqlTupleElement) {
+        type = Type.SQL_TUPLE;
+        this.sqlTupleElement = Objects.requireNonNull(sqlTupleElement);
         packageScopeElement = null;
         declarationElement = null;
         utilizationElement = null;
@@ -32,7 +32,7 @@ public class BlockItemElement {
         type = Type.DECLARATION;
         this.declarationElement = Objects.requireNonNull(declarationElement);
         packageScopeElement = null;
-        tupleElement = null;
+        sqlTupleElement = null;
         utilizationElement = null;
         sqlTypeDictionaryElement = null;
     }
@@ -41,17 +41,17 @@ public class BlockItemElement {
         type = Type.UTILIZATION;
         this.utilizationElement = Objects.requireNonNull(utilizationElement);
         packageScopeElement = null;
-        tupleElement = null;
+        sqlTupleElement = null;
         declarationElement = null;
         sqlTypeDictionaryElement = null;
     }
 
     public BlockItemElement(SqlTypeDictionaryElement sqlTypeDictionaryElement) {
-        type = Type.TYPE_HANDLER_DICTIONARY_DEFINITION;
+        type = Type.SQL_TYPE_DICTIONARY;
         this.sqlTypeDictionaryElement = sqlTypeDictionaryElement;
         utilizationElement = null;
         packageScopeElement = null;
-        tupleElement = null;
+        sqlTupleElement = null;
         declarationElement = null;
     }
 
@@ -63,8 +63,8 @@ public class BlockItemElement {
         return packageScopeElement;
     }
 
-    public TupleElement getTupleElement() {
-        return tupleElement;
+    public SqlTupleElement getSqlTupleElement() {
+        return sqlTupleElement;
     }
 
     public DeclarationElement getDeclarationElement() {
@@ -82,17 +82,44 @@ public class BlockItemElement {
     public enum Type {
         DECLARATION,
         PACKAGE_SCOPE,
-        RECORD_DEFINITION,
-        TYPE_HANDLER_DICTIONARY_DEFINITION,
+        SQL_TUPLE,
+        SQL_TYPE_DICTIONARY,
         UTILIZATION,
     }
 
     @Override
     public String toString() {
-        return "Element{" +
-                "type=" + type +
-                ", packageScopeElement=" + packageScopeElement +
-                ", tupleElement=" + tupleElement +
-                '}';
+        switch (type) {
+
+            case DECLARATION:
+                return "BlockItemElement{" +
+                        "type=" + type +
+                        ", declarationElement=" + declarationElement +
+                        "}";
+            case PACKAGE_SCOPE:
+                return "BlockItemElement{" +
+                        "type=" + type +
+                        ", packageScopeElement=" + packageScopeElement +
+                        "}";
+            case SQL_TUPLE:
+                return "BlockItemElement{" +
+                        "type=" + type +
+                        ", sqlTupleElement=" + sqlTupleElement +
+                        "}";
+            case SQL_TYPE_DICTIONARY:
+                return "BlockItemElement{" +
+                        "type=" + type +
+                        ", sqlTypeDictionaryElement=" + sqlTypeDictionaryElement +
+                        "}";
+            case UTILIZATION:
+                return "BlockItemElement{" +
+                        "type=" + type +
+                        ", utilizationElement=" + utilizationElement +
+                        "}";
+            default:
+                return "BlockItemElement{" +
+                        "type=" + type +
+                        "}";
+        }
     }
 }

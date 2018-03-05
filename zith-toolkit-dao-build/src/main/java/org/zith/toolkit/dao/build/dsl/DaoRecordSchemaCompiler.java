@@ -1,17 +1,17 @@
 package org.zith.toolkit.dao.build.dsl;
 
 import com.google.common.collect.ImmutableList;
-import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CommonTokenStream;
 import org.zith.toolkit.dao.build.data.*;
-import org.zith.toolkit.dao.build.dsl.parser.*;
+import org.zith.toolkit.dao.build.dsl.element.*;
+import org.zith.toolkit.dao.build.dsl.parser.ParserException;
+import org.zith.toolkit.dao.build.dsl.parser.RecordSchemaParser;
 import org.zith.toolkit.dao.build.generator.DaoSourceGenerator;
 
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
+import java.io.Reader;
 import java.sql.JDBCType;
-import java.sql.Types;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -23,26 +23,25 @@ public class DaoRecordSchemaCompiler {
         daoSourceGenerator = new DaoSourceGenerator();
     }
 
-    public void compile(Collection<File> sources, File destroot) throws IOException {
+    public void compile(Collection<File> sources, File destroot) throws IOException, ParserException {
         Compilation compilation = new Compilation(daoSourceGenerator, destroot);
 
         for (File source : sources) {
-            compile(compilation.unit(source), CharStreams.fromPath(source.toPath()), true);
+            compile(compilation.unit(source), new FileReader(source), true);
         }
     }
 
-    private synchronized void compile(Compilation.Unit unit, CharStream input, boolean emitting) throws IOException {
-        RecordSchemaLexer lexer = new RecordSchemaLexer(input);
-        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        RecordSchemaParser parser = new RecordSchemaParser(tokenStream);
+    private synchronized void compile(Compilation.Unit unit, Reader input, boolean emitting)
+            throws IOException, ParserException {
+        RecordSchemaParser parser = new RecordSchemaParser(input);
 
         ScopeContext topLevelContext = new ScopeContext(unit, Collections.emptyList());
 
-        RecordSchemaElement recordSchemaElement = parser.recordSchema().element;
-        for (String path : recordSchemaElement.getImportationPaths()) {
-            File importedFile = new File(unit.getFile().getParent(), path);
+        RecordSchemaElement recordSchemaElement = parser.recordSchema();
+        for (ImportedPathElement path : recordSchemaElement.getHead().getPaths()) {
+            File importedFile = new File(unit.getFile().getParent(), path.getPath());
 
-            compile(unit.getCompilation().unit(importedFile), CharStreams.fromPath(importedFile.toPath()), false);
+            compile(unit.getCompilation().unit(importedFile), new FileReader(importedFile), false);
         }
 
         process(topLevelContext, recordSchemaElement.getElements());
@@ -58,8 +57,8 @@ public class DaoRecordSchemaCompiler {
                 case PACKAGE_SCOPE:
                     process(context, element.getPackageScopeElement());
                     break;
-                case RECORD_DEFINITION:
-                    process(context, element.getTupleElement());
+                case SQL_TUPLE:
+                    process(context, element.getSqlTupleElement());
                     break;
                 case DECLARATION:
                     process(context, element.getDeclarationElement());
@@ -67,7 +66,7 @@ public class DaoRecordSchemaCompiler {
                 case UTILIZATION:
                     process(context, element.getUtilizationElement());
                     break;
-                case TYPE_HANDLER_DICTIONARY_DEFINITION:
+                case SQL_TYPE_DICTIONARY:
                     process(context, element.getSqlTypeDictionaryElement());
             }
         }
@@ -85,12 +84,18 @@ public class DaoRecordSchemaCompiler {
         process(context, scopeElement.getElements());
     }
 
-    private void process(ScopeContext context, TupleElement tupleElement) {
+    private void process(ScopeContext context, SqlTupleElement sqlTupleElement) {
         SqlTupleDefinition sqlTupleDefinition =
-                weave(context, tupleElement);
+                weave(context, sqlTupleElement);
+
+        SqlTypeDictionaryDefinition typeHandlerDictionary = context.getDefaultSqlTypeDictionary();
+
+        if (typeHandlerDictionary == null) {
+            throw new IllegalArgumentException("Type handler dictionary hasn't been set");
+        }
 
         SqlTupleDefinition.TupleRecordDefinition tupleRecordDefinition =
-                sqlTupleDefinition.resolve(context.getCurrentTypeHandlerDictionary());
+                sqlTupleDefinition.resolve(typeHandlerDictionary);
 
         context.getUnit().getCompilation().register(new TypeInformation(
                 context.getUnit(),
@@ -121,7 +126,7 @@ public class DaoRecordSchemaCompiler {
 
     private void process(ScopeContext context, DeclarationElement declarationElement) {
         switch (declarationElement.getTopic()) {
-            case "current-type-handler-dictionary": {
+            case "default-sql-type-dict": {
                 if (!(declarationElement.getValue() instanceof JavaReferenceElement)) {
                     throw new IllegalStateException("[current type handler dictionary] is not a java reference");
                 }
@@ -141,7 +146,7 @@ public class DaoRecordSchemaCompiler {
                     throw new IllegalStateException(declarationElement.getValue() + " is not a type handler dictionary");
                 }
 
-                context.setCurrentTypeHandlerDictionary(typeInformation.getTypeHandlerDictionaryDefinition());
+                context.setDefaultTypeDictionary(typeInformation.getTypeHandlerDictionaryDefinition());
             }
             break;
             default:
@@ -152,15 +157,15 @@ public class DaoRecordSchemaCompiler {
     private void process(ScopeContext context, UtilizationElement utilizationElement) {
         context.registerLocalName(
                 utilizationElement.getInternalName(),
-                context.resolve(utilizationElement.getExternalReference())
+                utilizationElement.getExternalReference().getNames()
         );
     }
 
-    private SqlTupleDefinition weave(ScopeContext parentContext, TupleElement tupleElement) {
+    private SqlTupleDefinition weave(ScopeContext parentContext, SqlTupleElement sqlTupleElement) {
         return new SqlTupleDefinition(
-                tupleElement.getName(),
+                sqlTupleElement.getName(),
                 parentContext.getCurrentPackage().stream().collect(Collectors.joining(".")),
-                tupleElement.getFields().stream()
+                sqlTupleElement.getFields().stream()
                         .map(this::weave)
                         .collect(Collectors.toList())
         );
@@ -193,71 +198,70 @@ public class DaoRecordSchemaCompiler {
         int i = 0;
 
         for (SqlTypeDictionaryItemElement item : element.getItems()) {
-            switch (item.getType()) {
-                case TYPE_HANDLER: {
-                    SqlTypeHandlerElement typeHandlerElement = item.getSqlTypeHandlerElement();
+            String name;
+            String type;
+            SqlTypeHandlerDeclaration.Builder builder;
 
-                    String name = typeHandlerElement.getName();
-                    List<String> type = parentContext.resolve(typeHandlerElement.getTypeReference());
-                    if (name == null) {
-                        name = type.get(type.size() - 1);
-                    }
+            if (item.getTypeReference().isPresent()) {
+                List<String> typeNameComponents = parentContext.resolve(item.getTypeReference().get());
 
-                    if (typeHandlerBuilders.putIfAbsent(
-                            name,
-                            SqlTypeHandlerDeclaration.builder()
-                                    .setName(name)
-                                    .setType(type.stream().collect(Collectors.joining(".")))
-                    ) != null) {
+                name = item.getHandlerName()
+                        .orElseGet(() -> typeNameComponents.get(typeNameComponents.size() - 1));
+
+                type = typeNameComponents.stream().collect(Collectors.joining("."));
+                builder = SqlTypeHandlerDeclaration.builder()
+                        .setName(name)
+                        .setType(type);
+                SqlTypeHandlerDeclaration.Builder currentBuilder = typeHandlerBuilders.putIfAbsent(
+                        name,
+                        builder
+                );
+
+                if (currentBuilder != null) {
+                    if (!Objects.equals(currentBuilder.getType(), type)) {
                         throw new IllegalArgumentException("Duplicated name: " + name);
                     }
+
+                    builder = currentBuilder;
                 }
-                break;
-                case TYPE_SELECTOR: {
-                    SqlTypeSelectorElement typeSelectorDeclaration = item.getSqlTypeSelectorDeclaration();
+            } else {
+                name = item.getHandlerName().orElseThrow(IllegalStateException::new);
+                builder = Optional.ofNullable(typeHandlerBuilders.get(name))
+                        .orElseThrow(() -> new IllegalArgumentException("Unknown type handler: " + name));
+                type = builder.getType();
+            }
 
-                    String name = typeSelectorDeclaration.getTypeHandlerName();
-                    SqlTypeHandlerDeclaration.Builder builder =
-                            typeHandlerBuilders.get(name);
+            for (SqlTypePatternElement pattern : item.getPatterns()) {
+                Object parameterJdbcType = pattern.getParameters().get("jdbcType");
 
-                    if (builder == null) {
-                        throw new NoSuchElementException("Cannot find a type handler with name: " + name);
-                    }
-
-                    SqlTypePatternElement sqlTypePatternElement = typeSelectorDeclaration.getSqlTypePatternElement();
-
-                    Object parameterJdbcType = sqlTypePatternElement.getParameters().get("jdbcType");
-
-                    if (parameterJdbcType != null && !(parameterJdbcType instanceof String)) {
-                        throw new IllegalArgumentException("jdbcType should be string");
-                    }
-
-                    int jdbcSqlType;
-
-                    {
-                        String jdbcTypeName;
-                        if (parameterJdbcType == null) {
-                            jdbcTypeName = typeSelectorDeclaration.getSqlTypePatternElement().getSqlType().stream()
-                                    .map(String::toUpperCase)
-                                    .collect(Collectors.joining("_"));
-                        } else {
-                            jdbcTypeName = (String) parameterJdbcType;
-                        }
-
-                        try {
-                            jdbcSqlType = JDBCType.valueOf(jdbcTypeName).getVendorTypeNumber();
-                        } catch (IllegalArgumentException e) {
-                            throw new IllegalArgumentException("Failed to find jdbc type: " + jdbcTypeName);
-                        }
-                    }
-
-                    builder.addTypeSelector(new SqlTypeHandlerDeclaration.TypeSelector(
-                            new SqlTypeDetonator(sqlTypePatternElement.getSqlType()),
-                            jdbcSqlType,
-                            i++
-                    ));
+                if (parameterJdbcType != null && !(parameterJdbcType instanceof String)) {
+                    throw new IllegalArgumentException("jdbcType should be string");
                 }
-                break;
+
+                int jdbcSqlType;
+
+                {
+                    String jdbcTypeName;
+                    if (parameterJdbcType == null) {
+                        jdbcTypeName = pattern.getSqlType().stream()
+                                .map(String::toUpperCase)
+                                .collect(Collectors.joining("_"));
+                    } else {
+                        jdbcTypeName = (String) parameterJdbcType;
+                    }
+
+                    try {
+                        jdbcSqlType = JDBCType.valueOf(jdbcTypeName).getVendorTypeNumber();
+                    } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException("Failed to find jdbc type: " + jdbcTypeName);
+                    }
+                }
+
+                builder.addTypeSelector(new SqlTypeHandlerDeclaration.TypeSelector(
+                        new SqlTypeDetonator(pattern.getSqlType()),
+                        jdbcSqlType,
+                        i++
+                ));
             }
         }
 
