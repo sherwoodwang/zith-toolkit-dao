@@ -1,36 +1,27 @@
 package org.zith.toolkit.dao.build.dsl.element;
 
-import com.google.common.collect.ImmutableList;
-
-import java.util.List;
+import javax.annotation.Nullable;
 import java.util.Objects;
 import java.util.Optional;
 
 public class SqlTypeDictionaryItemElement {
     private final String handlerName;
-    private final JavaReferenceElement typeReference;
-    private final List<SqlTypePatternElement> patterns;
+    private final JavaReferenceElement type;
 
     public SqlTypeDictionaryItemElement(
-            String handlerName,
-            JavaReferenceElement typeReference,
-            List<SqlTypePatternElement> patterns
+            @Nullable String handlerName,
+            JavaReferenceElement type
     ) {
         this.handlerName = handlerName;
-        this.typeReference = typeReference;
-        this.patterns = Objects.requireNonNull(ImmutableList.copyOf(patterns));
+        this.type = Objects.requireNonNull(type);
     }
 
     public Optional<String> getHandlerName() {
         return Optional.ofNullable(handlerName);
     }
 
-    public Optional<JavaReferenceElement> getTypeReference() {
-        return Optional.ofNullable(typeReference);
-    }
-
-    public List<SqlTypePatternElement> getPatterns() {
-        return patterns;
+    public JavaReferenceElement getType() {
+        return type;
     }
 
     @Override
@@ -39,22 +30,20 @@ public class SqlTypeDictionaryItemElement {
         if (o == null || getClass() != o.getClass()) return false;
         SqlTypeDictionaryItemElement that = (SqlTypeDictionaryItemElement) o;
         return Objects.equals(handlerName, that.handlerName) &&
-                Objects.equals(typeReference, that.typeReference) &&
-                Objects.equals(patterns, that.patterns);
+                Objects.equals(type, that.type);
     }
 
     @Override
     public int hashCode() {
 
-        return Objects.hash(handlerName, typeReference, patterns);
+        return Objects.hash(handlerName, type);
     }
 
     @Override
     public String toString() {
         return "SqlTypeDictionaryItemElement{" +
                 "handlerName='" + handlerName + '\'' +
-                ", typeReference=" + typeReference +
-                ", patterns=" + patterns +
+                ", type=" + type +
                 '}';
     }
 }

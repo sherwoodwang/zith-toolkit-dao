@@ -1,19 +1,15 @@
 package org.zith.toolkit.dao.util.typehandler;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.zith.toolkit.dao.support.DaoSqlOperationContext;
 import org.zith.toolkit.dao.support.DaoSqlTypeHandler;
 
-import java.sql.CallableStatement;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 
 public class DoubleHandler implements DaoSqlTypeHandler<Double> {
-    private final String sqlType;
-    private final int jdbcType;
 
-    public DoubleHandler(String sqlType, int jdbcType) {
-        this.sqlType = sqlType;
-        this.jdbcType = jdbcType;
+    public DoubleHandler() {
     }
 
     @Override
@@ -23,40 +19,44 @@ public class DoubleHandler implements DaoSqlTypeHandler<Double> {
 
     @Override
     public String getSqlType() {
-        return sqlType;
+        return "DOUBLE";
     }
 
     @Override
     public int getJdbcType() {
-        return jdbcType;
+        return Types.DOUBLE;
     }
 
+    @Nullable
     @Override
-    public Double load(ResultSet resultSet, int columnIndex) throws SQLException {
+    public Double load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, int columnIndex) throws SQLException {
         Double value = resultSet.getDouble(columnIndex);
         return resultSet.wasNull() ? null : value;
     }
 
+    @Nullable
     @Override
-    public Double load(ResultSet resultSet, String columnName) throws SQLException {
+    public Double load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, @NotNull String columnName) throws SQLException {
         Double value = resultSet.getDouble(columnName);
         return resultSet.wasNull() ? null : value;
     }
 
+    @Nullable
     @Override
-    public Double load(CallableStatement callableStatement, int columnIndex) throws SQLException {
+    public Double load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int columnIndex) throws SQLException {
         Double value = callableStatement.getDouble(columnIndex);
         return callableStatement.wasNull() ? null : value;
     }
 
+    @Nullable
     @Override
-    public Double load(CallableStatement callableStatement, String columnName) throws SQLException {
+    public Double load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String columnName) throws SQLException {
         Double value = callableStatement.getDouble(columnName);
         return callableStatement.wasNull() ? null : value;
     }
 
     @Override
-    public void store(PreparedStatement preparedStatement, int parameterIndex, Double value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull PreparedStatement preparedStatement, int parameterIndex, @Nullable Double value) throws SQLException {
         if (value == null) {
             preparedStatement.setNull(parameterIndex, getJdbcType(), getSqlType());
         } else {
@@ -65,7 +65,7 @@ public class DoubleHandler implements DaoSqlTypeHandler<Double> {
     }
 
     @Override
-    public void store(CallableStatement callableStatement, int parameterIndex, Double value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int parameterIndex, @Nullable Double value) throws SQLException {
         if (value == null) {
             callableStatement.setNull(parameterIndex, getJdbcType(), getSqlType());
         } else {
@@ -75,7 +75,7 @@ public class DoubleHandler implements DaoSqlTypeHandler<Double> {
     }
 
     @Override
-    public void store(CallableStatement callableStatement, String parameterName, Double value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String parameterName, @Nullable Double value) throws SQLException {
         if (value == null) {
             callableStatement.setNull(parameterName, getJdbcType(), getSqlType());
         } else {
@@ -84,12 +84,12 @@ public class DoubleHandler implements DaoSqlTypeHandler<Double> {
     }
 
     @Override
-    public Object convertToNativeValue(Double value) {
+    public Object convertToNativeValue(@Nullable DaoSqlOperationContext context, Connection connection, Double value) {
         return value;
     }
 
     @Override
-    public Double convertFromNativeValue(Object value) {
+    public Double convertFromNativeValue(@Nullable DaoSqlOperationContext context, Object value) {
         if (value == null) {
             return null;
         } else if (value instanceof Number) {

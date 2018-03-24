@@ -1,11 +1,10 @@
 package org.zith.toolkit.dao.support;
 
-import java.sql.CallableStatement;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.sql.*;
 import java.util.Objects;
-import java.util.Optional;
 
 public interface DaoSqlTypeHandler<T> {
 
@@ -15,23 +14,27 @@ public interface DaoSqlTypeHandler<T> {
 
     int getJdbcType();
 
-    T load(ResultSet resultSet, int columnIndex) throws SQLException;
+    @Nullable
+    T load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, int columnIndex) throws SQLException;
 
-    T load(ResultSet resultSet, String columnName) throws SQLException;
+    @Nullable
+    T load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, @NotNull String columnName) throws SQLException;
 
-    T load(CallableStatement callableStatement, int columnIndex) throws SQLException;
+    @Nullable
+    T load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int columnIndex) throws SQLException;
 
-    T load(CallableStatement callableStatement, String columnName) throws SQLException;
+    @Nullable
+    T load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String columnName) throws SQLException;
 
-    void store(PreparedStatement preparedStatement, int parameterIndex, T value) throws SQLException;
+    void store(@Nullable DaoSqlOperationContext context, @NotNull PreparedStatement preparedStatement, int parameterIndex, @Nullable T value) throws SQLException;
 
-    void store(CallableStatement callableStatement, int parameterIndex, T value) throws SQLException;
+    void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int parameterIndex, @Nullable T value) throws SQLException;
 
-    void store(CallableStatement callableStatement, String parameterName, T value) throws SQLException;
+    void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String parameterName, @Nullable T value) throws SQLException;
 
-    Object convertToNativeValue(T value);
+    Object convertToNativeValue(@Nullable DaoSqlOperationContext context, Connection connection, T value) throws SQLException;
 
-    T convertFromNativeValue(Object value);
+    T convertFromNativeValue(@Nullable DaoSqlOperationContext context, Object value) throws SQLException;
 
     @SuppressWarnings("unchecked")
     static <TR> DaoSqlTypeHandler<TR> cast(
@@ -49,4 +52,5 @@ public interface DaoSqlTypeHandler<T> {
 
         throw new ClassCastException();
     }
+
 }

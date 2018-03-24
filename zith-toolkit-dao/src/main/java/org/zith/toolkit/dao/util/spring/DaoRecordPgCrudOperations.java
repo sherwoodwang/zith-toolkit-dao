@@ -1,19 +1,25 @@
 package org.zith.toolkit.dao.util.spring;
 
-import org.springframework.jdbc.core.ArgumentTypePreparedStatementSetter;
+import org.springframework.jdbc.core.ArgumentPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCallback;
+import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.JdbcUtils;
 import org.zith.toolkit.dao.support.DaoSqlColumn;
+import org.zith.toolkit.dao.support.DaoSqlOperationContext;
 import org.zith.toolkit.dao.support.DaoSqlTupleType;
-import org.zith.toolkit.dao.support.DaoSqlTypeHandler;
 import org.zith.toolkit.dao.util.sql.PgSqls;
 
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+@SuppressWarnings({"WeakerAccess", "unused"})
 public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
 
     private final String sqlCreateWithGeneratedId;
@@ -33,38 +39,45 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
     public void createWithGeneratedId(T record) {
         GeneratedKeyHolder keyHolder = new GeneratedKeyHolder();
 
-        ArgumentTypePreparedStatementSetter pss = new ArgumentTypePreparedStatementSetter(
+        ArgumentPreparedStatementSetter pss = new ArgumentPreparedStatementSetter(
                 getDataColumns().stream()
-                        .map(c -> getAsNativeValue(c, record))
-                        .toArray(),
-                getDataColumns().stream()
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(c -> extract(c, record))
                         .toArray()
         );
 
-        String[] idColumnNames = getIdColumns().stream()
+        List<DaoSqlColumn<T, ?>> idColumns = getIdColumns();
+
+        String[] idColumnNames = idColumns.stream()
                 .map(DaoSqlColumn::getColumnName)
                 .toArray(String[]::new);
 
-        getJdbcTemplate().update(
-                con -> {
+        getJdbcTemplate().execute(
+                (PreparedStatementCreator) con -> {
                     PreparedStatement ps = con.prepareStatement(sqlCreateWithGeneratedId, idColumnNames);
                     pss.setValues(ps);
                     return ps;
                 },
-                keyHolder
+                (PreparedStatementCallback<Integer>) ps -> {
+                    int rows = ps.executeUpdate();
+                    ResultSet rs = ps.getGeneratedKeys();
+                    if (rs != null) {
+                        if (rs.next()) {
+                            try {
+                                for (DaoSqlColumn<T, ?> column : idColumns) {
+                                    loadColumn(null, record, rs, column);
+                                }
+                            } finally {
+                                JdbcUtils.closeResultSet(rs);
+                            }
+                        }
+                    }
+                    return rows;
+                }
         );
+    }
 
-        Map<String, Object> keys = keyHolder.getKeys();
-
-        if (keys == null) {
-            throw new IllegalStateException();
-        }
-
-        for (DaoSqlColumn<T, ?> column : getIdColumns()) {
-            setAsNativeValue(column, record, keys.get(column.getColumnName()));
-        }
+    private static <T, U> void loadColumn(DaoSqlOperationContext context, T record, ResultSet rs, DaoSqlColumn<T, U> column) throws SQLException {
+        column.set(record, column.getTypeHandler().load(context, rs, column.getColumnName()));
     }
 
     public boolean createIfNotExists(T record) {
@@ -74,14 +87,7 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
                         getIdColumns().stream(),
                         getDataColumns().stream()
                 )
-                        .map(c -> getAsNativeValue(c, record))
-                        .toArray(),
-                Stream.concat(
-                        getIdColumns().stream(),
-                        getDataColumns().stream()
-                )
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(c -> extract(c, record))
                         .toArray()
         );
 
@@ -95,11 +101,7 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
         return getJdbcTemplate().queryForObject(
                 sql,
                 IntStream.range(0, getIdColumns().size()).boxed()
-                        .map(i -> convertToNativeValue(getIdColumns().get(i).getTypeHandler(), idComponents[i]))
-                        .toArray(),
-                getIdColumns().stream()
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(i -> TypeHandlerBasedSqlValue.from(getIdColumns().get(i).getTypeHandler(), idComponents[i]))
                         .toArray(),
                 getRowMapper()
         );
@@ -111,11 +113,7 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
         T refreshedRecord = getJdbcTemplate().queryForObject(
                 sql,
                 getIdColumns().stream()
-                        .map(c -> getAsNativeValue(c, record))
-                        .toArray(),
-                getIdColumns().stream()
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(c -> extract(c, record))
                         .toArray(),
                 getRowMapper()
         );
@@ -127,8 +125,8 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
         return read(LockLevel.UPDATE, WaitingMode.WAIT, idComponents);
     }
 
-    public T readForNoIdUpdate(Object... idComponents) {
-        return read(LockLevel.NO_ID_UPDATE, WaitingMode.WAIT, idComponents);
+    public T readForNoKeyUpdate(Object... idComponents) {
+        return read(LockLevel.NO_KEY_UPDATE, WaitingMode.WAIT, idComponents);
     }
 
     public T readForShare(Object... idComponents) {
@@ -147,8 +145,8 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
         return read(LockLevel.UPDATE, WaitingMode.NO_WAIT, idComponents);
     }
 
-    public T readForNoIdUpdateNoWait(Object... idComponents) {
-        return read(LockLevel.NO_ID_UPDATE, WaitingMode.NO_WAIT, idComponents);
+    public T readForNoKeyUpdateNoWait(Object... idComponents) {
+        return read(LockLevel.NO_KEY_UPDATE, WaitingMode.NO_WAIT, idComponents);
     }
 
     public T readForShareNoWait(Object... idComponents) {
@@ -167,8 +165,8 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
         return read(LockLevel.UPDATE, WaitingMode.SKIP_LOCKED, idComponents);
     }
 
-    public T readForNoIdUpdateSkipLocked(Object... idComponents) {
-        return read(LockLevel.NO_ID_UPDATE, WaitingMode.SKIP_LOCKED, idComponents);
+    public T readForNoKeyUpdateSkipLocked(Object... idComponents) {
+        return read(LockLevel.NO_KEY_UPDATE, WaitingMode.SKIP_LOCKED, idComponents);
     }
 
     public T readForShareSkipLocked(Object... idComponents) {
@@ -183,8 +181,8 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
         read(LockLevel.UPDATE, WaitingMode.WAIT, record);
     }
 
-    public void readForNoIdUpdate(T record) {
-        read(LockLevel.NO_ID_UPDATE, WaitingMode.WAIT, record);
+    public void readForNoKeyUpdate(T record) {
+        read(LockLevel.NO_KEY_UPDATE, WaitingMode.WAIT, record);
     }
 
     public void readForShare(T record) {
@@ -203,8 +201,8 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
         read(LockLevel.UPDATE, WaitingMode.NO_WAIT, record);
     }
 
-    public void readForNoIdUpdateNoWait(T record) {
-        read(LockLevel.NO_ID_UPDATE, WaitingMode.NO_WAIT, record);
+    public void readForNoKeyUpdateNoWait(T record) {
+        read(LockLevel.NO_KEY_UPDATE, WaitingMode.NO_WAIT, record);
     }
 
     public void readForShareNoWait(T record) {
@@ -223,8 +221,8 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
         read(LockLevel.UPDATE, WaitingMode.SKIP_LOCKED, record);
     }
 
-    public void readForNoIdUpdateSkipLocked(T record) {
-        read(LockLevel.NO_ID_UPDATE, WaitingMode.SKIP_LOCKED, record);
+    public void readForNoKeyUpdateSkipLocked(T record) {
+        read(LockLevel.NO_KEY_UPDATE, WaitingMode.SKIP_LOCKED, record);
     }
 
     public void readForShareSkipLocked(T record) {
@@ -238,7 +236,7 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
     public enum LockLevel {
         NONE,
         UPDATE,
-        NO_ID_UPDATE,
+        NO_KEY_UPDATE,
         SHARE,
         ID_SHARE,
     }
@@ -395,7 +393,7 @@ public class DaoRecordPgCrudOperations<T> extends DaoRecordCrudOperations<T> {
                             break;
                         case UPDATE:
                             sb.append(" FOR UPDATE");
-                        case NO_ID_UPDATE:
+                        case NO_KEY_UPDATE:
                             sb.append(" FOR NO KEY UPDATE");
                             break;
                         case SHARE:

@@ -4,8 +4,9 @@ apply plugin: 'maven-publish'
 sourceCompatibility = 9
 
 dependencies {
-    // https://mvnrepository.com/artifact/org.springframework/spring-jdbc
-    compileOnly group: 'org.springframework', name: 'spring-jdbc', version: libraryVersions.spring
+    compileOnly group: 'org.jetbrains', name: 'annotations'
+    compileOnly group: 'org.springframework', name: 'spring-jdbc'
+    compileOnly group: 'org.postgresql', name: 'postgresql'
 }
 
 publishing {

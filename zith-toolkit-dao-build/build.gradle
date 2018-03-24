@@ -6,13 +6,10 @@ sourceCompatibility = 9
 dependencies {
     compile project(':zith-toolkit-dao')
 
-    // https://mvnrepository.com/artifact/com.squareup/javapoet
-    compile group: 'com.squareup', name: 'javapoet', version: libraryVersions.javapoet
+    compile group: 'com.squareup', name: 'javapoet', version: '1.10.0'
+    compile group: 'com.google.guava', name: 'guava', version: '24.0-jre'
 
-    // https://mvnrepository.com/artifact/com.google.guava/guava
-    compile group: 'com.google.guava', name: 'guava', version: libraryVersions.guava
-
-    testCompile group: 'junit', name: 'junit', version: libraryVersions.junit
+    testCompile group: 'junit', name: 'junit'
 }
 
 publishing {

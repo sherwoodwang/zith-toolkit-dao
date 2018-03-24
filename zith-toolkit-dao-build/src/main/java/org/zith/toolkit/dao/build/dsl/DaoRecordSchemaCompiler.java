@@ -1,7 +1,11 @@
 package org.zith.toolkit.dao.build.dsl;
 
+import com.google.common.base.CaseFormat;
 import com.google.common.collect.ImmutableList;
-import org.zith.toolkit.dao.build.data.*;
+import org.zith.toolkit.dao.build.data.SqlColumnDefinition;
+import org.zith.toolkit.dao.build.data.SqlTupleDefinition;
+import org.zith.toolkit.dao.build.data.SqlTypeDictionaryDefinition;
+import org.zith.toolkit.dao.build.data.SqlTypeHandlerDeclaration;
 import org.zith.toolkit.dao.build.dsl.element.*;
 import org.zith.toolkit.dao.build.dsl.parser.ParserException;
 import org.zith.toolkit.dao.build.dsl.parser.RecordSchemaParser;
@@ -11,8 +15,9 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.sql.JDBCType;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class DaoRecordSchemaCompiler {
@@ -174,18 +179,10 @@ public class DaoRecordSchemaCompiler {
     private SqlColumnDefinition weave(ColumnElement columnElement) {
         return new SqlColumnDefinition(
                 columnElement.getColumnName(),
-                new SqlTypeDetonator(columnElement.getSqlTypeElement().getRoot()),
-                columnElement.getSqlTypeElement().getPrecision(),
-                null,
+                columnElement.getTypeHandlerName(),
                 null,
                 null,
                 null
-        );
-    }
-
-    private SqlTypeDetonator weave(SqlTypeElement sqlTypeElement) {
-        return new SqlTypeDetonator(
-                sqlTypeElement.getRoot()
         );
     }
 
@@ -193,84 +190,21 @@ public class DaoRecordSchemaCompiler {
             ScopeContext parentContext,
             SqlTypeDictionaryElement element
     ) {
-        HashMap<String, SqlTypeHandlerDeclaration.Builder> typeHandlerBuilders = new HashMap<>();
-
-        int i = 0;
-
-        for (SqlTypeDictionaryItemElement item : element.getItems()) {
-            String name;
-            String type;
-            SqlTypeHandlerDeclaration.Builder builder;
-
-            if (item.getTypeReference().isPresent()) {
-                List<String> typeNameComponents = parentContext.resolve(item.getTypeReference().get());
-
-                name = item.getHandlerName()
-                        .orElseGet(() -> typeNameComponents.get(typeNameComponents.size() - 1));
-
-                type = typeNameComponents.stream().collect(Collectors.joining("."));
-                builder = SqlTypeHandlerDeclaration.builder()
-                        .setName(name)
-                        .setType(type);
-                SqlTypeHandlerDeclaration.Builder currentBuilder = typeHandlerBuilders.putIfAbsent(
-                        name,
-                        builder
-                );
-
-                if (currentBuilder != null) {
-                    if (!Objects.equals(currentBuilder.getType(), type)) {
-                        throw new IllegalArgumentException("Duplicated name: " + name);
-                    }
-
-                    builder = currentBuilder;
-                }
-            } else {
-                name = item.getHandlerName().orElseThrow(IllegalStateException::new);
-                builder = Optional.ofNullable(typeHandlerBuilders.get(name))
-                        .orElseThrow(() -> new IllegalArgumentException("Unknown type handler: " + name));
-                type = builder.getType();
-            }
-
-            for (SqlTypePatternElement pattern : item.getPatterns()) {
-                Object parameterJdbcType = pattern.getParameters().get("jdbcType");
-
-                if (parameterJdbcType != null && !(parameterJdbcType instanceof String)) {
-                    throw new IllegalArgumentException("jdbcType should be string");
-                }
-
-                int jdbcSqlType;
-
-                {
-                    String jdbcTypeName;
-                    if (parameterJdbcType == null) {
-                        jdbcTypeName = pattern.getSqlType().stream()
-                                .map(String::toUpperCase)
-                                .collect(Collectors.joining("_"));
-                    } else {
-                        jdbcTypeName = (String) parameterJdbcType;
-                    }
-
-                    try {
-                        jdbcSqlType = JDBCType.valueOf(jdbcTypeName).getVendorTypeNumber();
-                    } catch (IllegalArgumentException e) {
-                        throw new IllegalArgumentException("Failed to find jdbc type: " + jdbcTypeName);
-                    }
-                }
-
-                builder.addTypeSelector(new SqlTypeHandlerDeclaration.TypeSelector(
-                        new SqlTypeDetonator(pattern.getSqlType()),
-                        jdbcSqlType,
-                        i++
-                ));
-            }
-        }
-
         return new SqlTypeDictionaryDefinition(
                 element.getName(),
                 parentContext.getCurrentPackage().stream().collect(Collectors.joining(".")),
-                typeHandlerBuilders.values().stream()
-                        .map(SqlTypeHandlerDeclaration.Builder::build)
+                element.getItems().stream()
+                        .map(item -> new SqlTypeHandlerDeclaration(
+                                item.getHandlerName().orElseGet(() -> {
+                                    List<String> names = item.getType().getNames();
+                                    return CaseFormat.UPPER_CAMEL.converterTo(CaseFormat.LOWER_UNDERSCORE)
+                                            .convert(names.get(names.size() - 1));
+                                }),
+                                parentContext.resolve(item.getType()).stream()
+                                        .collect(Collectors.joining("."))
+                        ))
                         .collect(Collectors.toList())
         );
     }
+
 }

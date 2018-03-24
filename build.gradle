@@ -5,14 +5,25 @@ subprojects {
     group 'org.zith.toolkit.dao'
     version '1.0-SNAPSHOT'
 
-    ext {
-        libraryVersions = [
-                antlr   : '4.7',
-                guava   : '23.0',
-                javapoet: '1.9.0',
-                junit   : '4.12',
-                spring  : '5.0.1.RELEASE',
-        ]
+    configurations.all {
+        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.version.isEmpty()) {
+                switch (details.requested.group + ':' + details.requested.name) {
+                // https://mvnrepository.com/artifact/org.springframework/spring-jdbc
+                    case 'org.springframework:spring-jdbc': details.useVersion '5.0.4.RELEASE'; break
+                // https://mvnrepository.com/artifact/com.squareup/javapoet
+                    case 'com.squareup:javapoet': details.useVersion '1.10.0'; break
+                // https://mvnrepository.com/artifact/com.google.guava/guava
+                    case 'com.google.guava:guava': details.useVersion '24.0-jre'; break
+                // https://mvnrepository.com/artifact/org.postgresql/postgresql
+                    case 'org.postgresql:postgresql': details.useVersion '42.2.1'; break
+                // https://mvnrepository.com/artifact/junit/junit
+                    case 'junit:junit': details.useVersion '4.12'; break
+                // https://mvnrepository.com/artifact/org.jetbrains/annotations
+                    case 'org.jetbrains:annotations': details.useVersion '15.0'; break
+                }
+            }
+        }
     }
 
     repositories {
@@ -21,5 +32,5 @@ subprojects {
 }
 
 task wrapper(type: Wrapper) {
-    gradleVersion = '4.5'
+    gradleVersion = '4.6'
 }

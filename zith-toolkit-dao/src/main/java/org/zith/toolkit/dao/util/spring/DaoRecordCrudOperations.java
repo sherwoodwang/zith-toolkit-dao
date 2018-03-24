@@ -2,18 +2,17 @@ package org.zith.toolkit.dao.util.spring;
 
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.SqlValue;
 import org.zith.toolkit.dao.support.DaoSqlColumn;
 import org.zith.toolkit.dao.support.DaoSqlTupleType;
-import org.zith.toolkit.dao.support.DaoSqlTypeHandler;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+@SuppressWarnings({"WeakerAccess", "unused"})
 public class DaoRecordCrudOperations<T> {
     private final JdbcTemplate jdbcTemplate;
     private final String table;
@@ -74,14 +73,7 @@ public class DaoRecordCrudOperations<T> {
                         getIdColumns().stream(),
                         getDataColumns().stream()
                 )
-                        .map(c -> getAsNativeValue(c, record))
-                        .toArray(),
-                Stream.concat(
-                        getIdColumns().stream(),
-                        getDataColumns().stream()
-                )
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(c -> extract(c, record))
                         .toArray()
         );
     }
@@ -92,11 +84,7 @@ public class DaoRecordCrudOperations<T> {
         return getJdbcTemplate().queryForObject(
                 sqlRead,
                 IntStream.range(0, getIdColumns().size()).boxed()
-                        .map(i -> convertToNativeValue(getIdColumns().get(i).getTypeHandler(), idComponents[i]))
-                        .toArray(),
-                getIdColumns().stream()
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(i -> TypeHandlerBasedSqlValue.from(getIdColumns().get(i).getTypeHandler(), idComponents[i]))
                         .toArray(),
                 getRowMapper()
         );
@@ -106,11 +94,7 @@ public class DaoRecordCrudOperations<T> {
         T refreshedRecord = getJdbcTemplate().queryForObject(
                 sqlRead,
                 getIdColumns().stream()
-                        .map(c -> getAsNativeValue(c, record))
-                        .toArray(),
-                getIdColumns().stream()
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(c -> extract(c, record))
                         .toArray(),
                 getRowMapper()
         );
@@ -125,14 +109,7 @@ public class DaoRecordCrudOperations<T> {
                         getDataColumns().stream(),
                         getIdColumns().stream()
                 )
-                        .map(c -> getAsNativeValue(c, record))
-                        .toArray(),
-                Stream.concat(
-                        getDataColumns().stream(),
-                        getIdColumns().stream()
-                )
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(c -> extract(c, record))
                         .toArray()
         );
 
@@ -147,11 +124,7 @@ public class DaoRecordCrudOperations<T> {
         int count = getJdbcTemplate().update(
                 sqlDelete,
                 IntStream.range(0, getIdColumns().size()).boxed()
-                        .map(i -> convertToNativeValue(getIdColumns().get(i).getTypeHandler(), idComponents[i]))
-                        .toArray(),
-                getIdColumns().stream()
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(i -> TypeHandlerBasedSqlValue.from(getIdColumns().get(i).getTypeHandler(), idComponents[i]))
                         .toArray()
         );
 
@@ -164,11 +137,7 @@ public class DaoRecordCrudOperations<T> {
         int count = getJdbcTemplate().update(
                 sqlDelete,
                 getIdColumns().stream()
-                        .map(c -> getAsNativeValue(c, record))
-                        .toArray(),
-                getIdColumns().stream()
-                        .map(DaoSqlColumn::getTypeHandler)
-                        .mapToInt(DaoSqlTypeHandler::getJdbcType)
+                        .map(c -> extract(c, record))
                         .toArray()
         );
 
@@ -201,16 +170,9 @@ public class DaoRecordCrudOperations<T> {
         }
     }
 
-    protected static <T, U> Object getAsNativeValue(DaoSqlColumn<T, U> column, T record) {
-        return column.getTypeHandler().convertToNativeValue(column.get(record));
-    }
-
-    protected static <T, U> void setAsNativeValue(DaoSqlColumn<T, U> column, T record, Object value) {
-        column.set(record, column.getTypeHandler().convertFromNativeValue(value));
-    }
-
-    protected static <T> Object convertToNativeValue(DaoSqlTypeHandler<T> typeHandler, Object value) {
-        return typeHandler.convertToNativeValue(typeHandler.type().cast(value));
+    protected static <T, U> SqlValue extract(DaoSqlColumn<T, U> column, T record) {
+        U value = column.get(record);
+        return TypeHandlerBasedSqlValue.from(column.getTypeHandler(), value);
     }
 
     @SafeVarargs
@@ -326,7 +288,7 @@ public class DaoRecordCrudOperations<T> {
                 }
             }
 
-            return Collections.unmodifiableList(new ArrayList<>(Arrays.asList(idColumns)));
+            return List.of(idColumns);
         }
 
         private static <T> List<DaoSqlColumn<T, ?>> dataColumns(
@@ -397,4 +359,5 @@ public class DaoRecordCrudOperations<T> {
                             .collect(Collectors.joining(" AND "));
         }
     }
+
 }

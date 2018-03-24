@@ -4,19 +4,19 @@ import java.util.Objects;
 
 public class ColumnElement {
     private final String columnName;
-    private final SqlTypeElement sqlTypeElement;
+    private final String typeHandlerName;
 
-    public ColumnElement(String columnName, SqlTypeElement sqlTypeElement) {
+    public ColumnElement(String columnName, String typeHandlerName) {
         this.columnName = Objects.requireNonNull(columnName);
-        this.sqlTypeElement = Objects.requireNonNull(sqlTypeElement);
+        this.typeHandlerName = typeHandlerName;
     }
 
     public String getColumnName() {
         return columnName;
     }
 
-    public SqlTypeElement getSqlTypeElement() {
-        return sqlTypeElement;
+    public String getTypeHandlerName() {
+        return typeHandlerName;
     }
 
     @Override
@@ -25,20 +25,20 @@ public class ColumnElement {
         if (o == null || getClass() != o.getClass()) return false;
         ColumnElement that = (ColumnElement) o;
         return Objects.equals(columnName, that.columnName) &&
-                Objects.equals(sqlTypeElement, that.sqlTypeElement);
+                Objects.equals(typeHandlerName, that.typeHandlerName);
     }
 
     @Override
     public int hashCode() {
 
-        return Objects.hash(columnName, sqlTypeElement);
+        return Objects.hash(columnName, typeHandlerName);
     }
 
     @Override
     public String toString() {
         return "ColumnElement{" +
                 "columnName='" + columnName + '\'' +
-                ", sqlTypeElement=" + sqlTypeElement +
+                ", typeHandlerName='" + typeHandlerName + '\'' +
                 '}';
     }
 }

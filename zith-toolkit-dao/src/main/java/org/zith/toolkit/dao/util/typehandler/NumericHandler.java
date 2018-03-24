@@ -1,20 +1,16 @@
 package org.zith.toolkit.dao.util.typehandler;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.zith.toolkit.dao.support.DaoSqlOperationContext;
 import org.zith.toolkit.dao.support.DaoSqlTypeHandler;
 
 import java.math.BigDecimal;
-import java.sql.CallableStatement;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 
-public class BigDecimalHandler implements DaoSqlTypeHandler<BigDecimal> {
-    private final String sqlType;
-    private final int jdbcType;
+public class NumericHandler implements DaoSqlTypeHandler<BigDecimal> {
 
-    public BigDecimalHandler(String sqlType, int jdbcType) {
-        this.sqlType = sqlType;
-        this.jdbcType = jdbcType;
+    public NumericHandler() {
     }
 
     @Override
@@ -24,36 +20,40 @@ public class BigDecimalHandler implements DaoSqlTypeHandler<BigDecimal> {
 
     @Override
     public String getSqlType() {
-        return sqlType;
+        return "NUMERIC";
     }
 
     @Override
     public int getJdbcType() {
-        return jdbcType;
+        return Types.NUMERIC;
     }
 
+    @Nullable
     @Override
-    public BigDecimal load(ResultSet resultSet, int columnIndex) throws SQLException {
+    public BigDecimal load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, int columnIndex) throws SQLException {
         return resultSet.getBigDecimal(columnIndex);
     }
 
+    @Nullable
     @Override
-    public BigDecimal load(ResultSet resultSet, String columnName) throws SQLException {
+    public BigDecimal load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, @NotNull String columnName) throws SQLException {
         return resultSet.getBigDecimal(columnName);
     }
 
+    @Nullable
     @Override
-    public BigDecimal load(CallableStatement callableStatement, int columnIndex) throws SQLException {
+    public BigDecimal load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int columnIndex) throws SQLException {
         return callableStatement.getBigDecimal(columnIndex);
     }
 
+    @Nullable
     @Override
-    public BigDecimal load(CallableStatement callableStatement, String columnName) throws SQLException {
+    public BigDecimal load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String columnName) throws SQLException {
         return callableStatement.getBigDecimal(columnName);
     }
 
     @Override
-    public void store(PreparedStatement preparedStatement, int parameterIndex, BigDecimal value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull PreparedStatement preparedStatement, int parameterIndex, @Nullable BigDecimal value) throws SQLException {
         if (value == null) {
             preparedStatement.setNull(parameterIndex, getJdbcType(), getSqlType());
         } else {
@@ -62,7 +62,7 @@ public class BigDecimalHandler implements DaoSqlTypeHandler<BigDecimal> {
     }
 
     @Override
-    public void store(CallableStatement callableStatement, int parameterIndex, BigDecimal value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int parameterIndex, @Nullable BigDecimal value) throws SQLException {
         if (value == null) {
             callableStatement.setNull(parameterIndex, getJdbcType(), getSqlType());
         } else {
@@ -72,7 +72,7 @@ public class BigDecimalHandler implements DaoSqlTypeHandler<BigDecimal> {
     }
 
     @Override
-    public void store(CallableStatement callableStatement, String parameterName, BigDecimal value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String parameterName, @Nullable BigDecimal value) throws SQLException {
         if (value == null) {
             callableStatement.setNull(parameterName, getJdbcType(), getSqlType());
         } else {
@@ -81,12 +81,12 @@ public class BigDecimalHandler implements DaoSqlTypeHandler<BigDecimal> {
     }
 
     @Override
-    public Object convertToNativeValue(BigDecimal value) {
+    public Object convertToNativeValue(@Nullable DaoSqlOperationContext context, Connection connection, BigDecimal value) {
         return value;
     }
 
     @Override
-    public BigDecimal convertFromNativeValue(Object value) {
+    public BigDecimal convertFromNativeValue(@Nullable DaoSqlOperationContext context, Object value) {
         if (value == null) {
             return null;
         } else if ((value instanceof Long) ||
@@ -94,6 +94,8 @@ public class BigDecimalHandler implements DaoSqlTypeHandler<BigDecimal> {
                 (value instanceof Short) ||
                 (value instanceof Byte)) {
             return BigDecimal.valueOf(((Number) value).longValue());
+        } else if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
         } else if (value instanceof Number) {
             return BigDecimal.valueOf(((Number) value).doubleValue());
         } else {

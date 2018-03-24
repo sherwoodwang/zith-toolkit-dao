@@ -3,39 +3,50 @@ package org.zith.toolkit.dao.build.generator;
 import com.squareup.javapoet.*;
 import org.zith.toolkit.dao.build.data.SqlColumnDefinition;
 import org.zith.toolkit.dao.build.data.SqlTupleDefinition;
-import org.zith.toolkit.dao.build.data.SqlTypeDetonator;
 import org.zith.toolkit.dao.build.data.SqlTypeHandlerDeclaration;
 import org.zith.toolkit.dao.support.DaoSqlColumn;
+import org.zith.toolkit.dao.support.DaoSqlOperationContext;
 import org.zith.toolkit.dao.support.DaoSqlTupleType;
 import org.zith.toolkit.dao.support.DaoSqlTypeHandler;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.lang.model.element.Modifier;
-import java.lang.reflect.Field;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @NotThreadSafe
-class TupleClassGenerator extends RecordClassGenerator {
+public class TupleClassGenerator extends RecordClassGenerator {
 
-    private final SqlTupleDefinition.TupleRecordDefinition tupleRecordDefinition;
+    private SqlTupleDefinition.TupleRecordDefinition tupleRecordDefinition;
     private TypeSpec.Builder tupleType;
     private ClassName tupleTypeName;
     private ParameterSpec sqlTypeDictionary;
     private CodeBlock.Builder constructorCode;
     private ParameterizedTypeName columnsBaseTypeName;
     private ClassName columnsTypeName;
-    private HashMap<TypeHandlerInstanceKey, TypeHandlerInstanceState> typeHandlerStates;
+    private HashMap<String, TypeHandlerInstanceState> typeHandlerStates;
     private FieldSpec columns;
     private ParameterSpec resultSet;
     private CodeBlock.Builder loadCode;
 
-    TupleClassGenerator(SqlTupleDefinition.TupleRecordDefinition tupleRecordDefinition) {
-        super(tupleRecordDefinition.getRecordDefinition());
+    @SuppressWarnings("WeakerAccess")
+    public TupleClassGenerator() {
+        super();
+    }
+
+    public final JavaFile generate(SqlTupleDefinition.TupleRecordDefinition tupleRecordDefinition) {
+        return generateFromTupleRecord(tupleRecordDefinition);
+    }
+
+    @SuppressWarnings("WeakerAccess")
+    JavaFile generateFromTupleRecord(SqlTupleDefinition.TupleRecordDefinition tupleRecordDefinition) {
         this.tupleRecordDefinition = tupleRecordDefinition;
+        return generateFromRecord(tupleRecordDefinition.getRecordDefinition());
     }
 
     @Override
@@ -115,6 +126,7 @@ class TupleClassGenerator extends RecordClassGenerator {
                         .addMethod(MethodSpec.methodBuilder("load")
                                 .addModifiers(Modifier.PUBLIC)
                                 .addAnnotation(Override.class)
+                                .addParameter(ClassName.get(DaoSqlOperationContext.class), "context")
                                 .addParameter(getSelfClassName(), "record")
                                 .addParameter(resultSet)
                                 .addException(SQLException.class)
@@ -123,7 +135,7 @@ class TupleClassGenerator extends RecordClassGenerator {
                                 .build())
                         .build());
         getTypeSpecBuilder().addMethod(
-                MethodSpec.methodBuilder("daoRecordType")
+                MethodSpec.methodBuilder("tupleType")
                         .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                         .addParameter(sqlTypeDictionary)
                         .returns(tupleTypeName)
@@ -154,11 +166,12 @@ class TupleClassGenerator extends RecordClassGenerator {
         boolean first = true;
         for (SqlColumnDefinition.ColumnFieldDefinition columnField :
                 tupleRecordDefinition.getColumnFieldDefinitions()) {
+
             if (!first) {
                 iAll.add(", ");
             }
 
-            ClassName fieldType = ClassName.bestGuess(columnField.getFieldDefinition().getType());
+            TypeName fieldType = getFieldDescriptor(columnField.getFieldDefinition().getFieldName()).getTypeName();
 
             ParameterizedTypeName columnFieldType = ParameterizedTypeName.get(
                     ClassName.get(DaoSqlColumn.class),
@@ -201,7 +214,7 @@ class TupleClassGenerator extends RecordClassGenerator {
                                                     fieldType
                                             ))
                                     .addStatement("return $N",
-                                            typeHandlerStates.get(createTypeHandlerInstanceKey(columnField))
+                                            typeHandlerStates.get(columnField.getTypeHandler().getName())
                                                     .field)
                                     .build())
                             .addMethod(MethodSpec.methodBuilder("set")
@@ -283,124 +296,52 @@ class TupleClassGenerator extends RecordClassGenerator {
     private void generateFieldLoader(int i, SqlColumnDefinition.ColumnFieldDefinition columnFieldDefinition) {
         SqlTypeHandlerDeclaration typeHandler = columnFieldDefinition.getTypeHandler();
 
-        TypeHandlerInstanceKey typeHandlerInstanceKey =
-                createTypeHandlerInstanceKey(columnFieldDefinition);
-
         int newTypeHandlerIndex = typeHandlerStates.size();
 
         TypeHandlerInstanceState typeHandlerInstanceState = typeHandlerStates.computeIfAbsent(
-                typeHandlerInstanceKey,
+                columnFieldDefinition.getTypeHandler().getName(),
                 __ -> {
                     TypeHandlerInstanceState th = new TypeHandlerInstanceState();
-                    th.key = typeHandlerInstanceKey;
                     th.declaration = typeHandler;
                     th.field =
                             FieldSpec.builder(
                                     ParameterizedTypeName.get(
                                             ClassName.get(DaoSqlTypeHandler.class),
-                                            ClassName.bestGuess(columnFieldDefinition.getFieldDefinition().getType())
+                                            getFieldDescriptor(
+                                                    columnFieldDefinition
+                                                            .getFieldDefinition()
+                                                            .getFieldName()
+                                            )
+                                                    .getTypeName()
                                     ),
                                     "th" + newTypeHandlerIndex
                             )
                                     .addModifiers(Modifier.PRIVATE, Modifier.FINAL)
                                     .build();
 
-                    ClassName jdbcSqlTypeClass = null;
-                    String jdbcSqlTypeName = null;
-                    CodeBlock jdbcSqlTypeReference;
-
-                    for (Field field : Types.class.getFields()) {
-                        try {
-                            if ((field.getModifiers() & java.lang.reflect.Modifier.STATIC) != 0 &&
-                                    Objects.equals(field.get(null), columnFieldDefinition.getJdbcType())) {
-                                jdbcSqlTypeClass = ClassName.get(Types.class);
-                                jdbcSqlTypeName = field.getName();
-                                break;
-                            }
-                        } catch (IllegalAccessException ignored) {
-                        }
-                    }
-
-                    if (jdbcSqlTypeClass != null && jdbcSqlTypeName != null) {
-                        jdbcSqlTypeReference =
-                                CodeBlock.of("$T.$L", jdbcSqlTypeClass, jdbcSqlTypeName);
-                    } else {
-                        jdbcSqlTypeReference =
-                                CodeBlock.of("$L", columnFieldDefinition.getJdbcType());
-                    }
-
                     constructorCode.addStatement(
-                            "$N = $N.$L($S, $L)",
+                            "$N = $N.$L()",
                             th.field,
                             sqlTypeDictionary,
-                            "handlerOf" + typeHandler.getName(),
-                            columnFieldDefinition.getType().toString(),
-                            jdbcSqlTypeReference
+                            TypeDictionaryClassGenerator.handlerGetterName(typeHandler)
                     );
 
                     return th;
                 });
 
         loadCode.addStatement(
-                "record.$L($N.load($N, $L))",
+                "record.$L($N.load($N, $N, $L))",
                 "set" + columnFieldDefinition.getFieldDefinition().getAccessorName(),
                 typeHandlerInstanceState.field,
+                "context",
                 resultSet,
                 i
         );
     }
 
-    private TypeHandlerInstanceKey createTypeHandlerInstanceKey(
-            SqlColumnDefinition.ColumnFieldDefinition columnFieldDefinition) {
-        return new TypeHandlerInstanceKey(
-                columnFieldDefinition.getTypeHandler().getName(),
-                columnFieldDefinition.getJdbcType(),
-                columnFieldDefinition.getType()
-        );
-    }
-
-    private class TypeHandlerInstanceKey {
-        private final String name;
-        private final int jdbcSqlType;
-        private final SqlTypeDetonator rootSqlTypeName;
-
-        private TypeHandlerInstanceKey(String name, int jdbcSqlType, SqlTypeDetonator rootSqlTypeName) {
-            this.name = Objects.requireNonNull(name);
-            this.jdbcSqlType = jdbcSqlType;
-            this.rootSqlTypeName = Objects.requireNonNull(rootSqlTypeName);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            TypeHandlerInstanceKey that = (TypeHandlerInstanceKey) o;
-
-            if (jdbcSqlType != that.jdbcSqlType) return false;
-            if (!name.equals(that.name)) return false;
-            return rootSqlTypeName.equals(that.rootSqlTypeName);
-        }
-
-        @Override
-        public int hashCode() {
-            int result = name.hashCode();
-            result = 31 * result + jdbcSqlType;
-            result = 31 * result + rootSqlTypeName.hashCode();
-            return result;
-        }
-    }
-
     private class TypeHandlerInstanceState {
-        private TypeHandlerInstanceKey key;
         private SqlTypeHandlerDeclaration declaration;
         private FieldSpec field;
     }
 
-    private static class TypeHandlerFactor {
-
-        public static int create(SqlTypeHandlerDeclaration.TypeSelector ts, int jdbcSqlType, List<String> rootSqlType) {
-            return 0;
-        }
-    }
 }

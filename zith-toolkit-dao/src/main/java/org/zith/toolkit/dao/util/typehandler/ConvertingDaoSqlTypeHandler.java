@@ -1,11 +1,11 @@
 package org.zith.toolkit.dao.util.typehandler;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.zith.toolkit.dao.support.DaoSqlOperationContext;
 import org.zith.toolkit.dao.support.DaoSqlTypeHandler;
 
-import java.sql.CallableStatement;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 
 public abstract class ConvertingDaoSqlTypeHandler<T, U> implements DaoSqlTypeHandler<T> {
     private final DaoSqlTypeHandler<U> base;
@@ -24,52 +24,56 @@ public abstract class ConvertingDaoSqlTypeHandler<T, U> implements DaoSqlTypeHan
         return base.getJdbcType();
     }
 
+    @Nullable
     @Override
-    public T load(ResultSet resultSet, int columnIndex) throws SQLException {
-        return load(base.load(resultSet, columnIndex));
+    public T load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, int columnIndex) throws SQLException {
+        return unpack(base.load(context, resultSet, columnIndex));
+    }
+
+    @Nullable
+    @Override
+    public T load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, @NotNull String columnName) throws SQLException {
+        return unpack(base.load(context, resultSet, columnName));
+    }
+
+    @Nullable
+    @Override
+    public T load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int columnIndex) throws SQLException {
+        return unpack(base.load(context, callableStatement, columnIndex));
+    }
+
+    @Nullable
+    @Override
+    public T load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String columnName) throws SQLException {
+        return unpack(base.load(context, callableStatement, columnName));
     }
 
     @Override
-    public T load(ResultSet resultSet, String columnName) throws SQLException {
-        return load(base.load(resultSet, columnName));
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull PreparedStatement preparedStatement, int parameterIndex, @Nullable T value) throws SQLException {
+        base.store(context, preparedStatement, parameterIndex, pack(value));
     }
 
     @Override
-    public T load(CallableStatement callableStatement, int columnIndex) throws SQLException {
-        return load(base.load(callableStatement, columnIndex));
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int parameterIndex, @Nullable T value) throws SQLException {
+        base.store(context, callableStatement, parameterIndex, pack(value));
     }
 
     @Override
-    public T load(CallableStatement callableStatement, String columnName) throws SQLException {
-        return load(base.load(callableStatement, columnName));
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String parameterName, @Nullable T value) throws SQLException {
+        base.store(context, callableStatement, parameterName, pack(value));
     }
 
     @Override
-    public void store(PreparedStatement preparedStatement, int parameterIndex, T value) throws SQLException {
-        base.store(preparedStatement, parameterIndex, store(value));
+    public Object convertToNativeValue(@Nullable DaoSqlOperationContext context, Connection connection, T value) throws SQLException {
+        return base.convertToNativeValue(context, connection, pack(value));
     }
 
     @Override
-    public void store(CallableStatement callableStatement, int parameterIndex, T value) throws SQLException {
-        base.store(callableStatement, parameterIndex, store(value));
+    public T convertFromNativeValue(@Nullable DaoSqlOperationContext context, Object value) throws SQLException {
+        return unpack(base.convertFromNativeValue(context, value));
     }
 
-    @Override
-    public void store(CallableStatement callableStatement, String parameterName, T value) throws SQLException {
-        base.store(callableStatement, parameterName, store(value));
-    }
+    protected abstract T unpack(U value);
 
-    @Override
-    public Object convertToNativeValue(T value) {
-        return base.convertToNativeValue(store(value));
-    }
-
-    @Override
-    public T convertFromNativeValue(Object value) {
-        return load(base.convertFromNativeValue(value));
-    }
-
-    protected abstract T load(U value);
-
-    protected abstract U store(T value);
+    protected abstract U pack(T value);
 }

@@ -13,7 +13,6 @@ public class SqlTypeDictionaryDefinition {
     private final List<SqlTypeHandlerDeclaration> sqlTypeHandlerDeclarations;
 
     private final Map<String, SqlTypeHandlerDeclaration> typeHandlerDeclarationsByName;
-    private final Map<SqlTypeDetonator, SqlTypeHandlerDeclaration> typeHandlerDeclarationsBySqlType;
 
     public SqlTypeDictionaryDefinition(
             String name,
@@ -26,18 +25,6 @@ public class SqlTypeDictionaryDefinition {
 
         typeHandlerDeclarationsByName = Collections.unmodifiableMap(this.sqlTypeHandlerDeclarations.stream()
                 .collect(Collectors.toMap(SqlTypeHandlerDeclaration::getName, UnaryOperator.identity())));
-        typeHandlerDeclarationsBySqlType = Collections.unmodifiableMap(this.sqlTypeHandlerDeclarations.stream()
-                .flatMap(d -> d.getTypeSelectors().stream()
-                        .map(ts -> new AbstractMap.SimpleImmutableEntry<>(ts, d)))
-                .sorted(Comparator.comparing(e -> e.getKey().getNice()))
-                .map(e -> new AbstractMap.SimpleImmutableEntry<>(e.getKey().getRootSqlType(), e.getValue()))
-                .collect(Collectors.groupingBy(
-                        Map.Entry::getKey,
-                        Collectors.mapping(
-                                Map.Entry::getValue,
-                                Collectors.reducing(null, (v1, v2) -> v1 != null ? v1 : v2)
-                        )
-                )));
     }
 
     public String getName() {
@@ -52,18 +39,8 @@ public class SqlTypeDictionaryDefinition {
         return sqlTypeHandlerDeclarations;
     }
 
-    public SqlTypeHandlerDeclaration getTypeHandlerDeclaration(String name) {
-        SqlTypeHandlerDeclaration sqlTypeHandlerDeclaration = typeHandlerDeclarationsByName.get(name);
-
-        if (sqlTypeHandlerDeclaration == null) {
-            throw new NoSuchElementException();
-        }
-
-        return sqlTypeHandlerDeclaration;
-    }
-
-    public SqlTypeHandlerDeclaration getTypeHandlerDeclaration(SqlTypeDetonator sqlType) {
-        return typeHandlerDeclarationsBySqlType.get(sqlType);
+    public Optional<SqlTypeHandlerDeclaration> getTypeHandlerDeclaration(String name) {
+        return Optional.ofNullable(typeHandlerDeclarationsByName.get(name));
     }
 
     public String getQualifiedName() {

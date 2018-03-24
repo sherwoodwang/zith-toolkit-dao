@@ -5,7 +5,6 @@ import org.zith.toolkit.dao.build.dsl.element.*;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
 import java.io.Reader;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
@@ -348,6 +347,10 @@ public class RecordSchemaParser {
             }
         }
 
+        if (!readSequence("}")) {
+            throw parserException("Expecting a \"}\"");
+        }
+
         return Optional.of(new SqlTupleElement(
                 recordName.get(),
                 columns
@@ -355,26 +358,24 @@ public class RecordSchemaParser {
     }
 
     Optional<ColumnElement> readSqlTupleColumn() throws IOException, ParserException {
-        Optional<String> columnName = readSqlIdentifier();
-
-        if (!columnName.isPresent()) {
+        Optional<String> typeHandlerName = readTypeName();
+        if (!typeHandlerName.isPresent()) {
             return Optional.empty();
         }
 
         readSpaces();
-        Optional<SqlTypeElement> sqlType = readSqlType();
-
-        if (!sqlType.isPresent()) {
-            throw parserException("Expecting sql type");
+        Optional<String> columnName = readSqlIdentifier();
+        if (!columnName.isPresent()) {
+            throw parserException("Expecting a SQL identifier as column name");
         }
 
         return Optional.of(new ColumnElement(
                 columnName.get(),
-                sqlType.get()
+                typeHandlerName.get()
         ));
     }
 
-    Optional<SqlTypeDictionaryElement> readSqlTypeDictionary() throws IOException, ParserException {
+    private Optional<SqlTypeDictionaryElement> readSqlTypeDictionary() throws IOException, ParserException {
         fork();
         if (!readName().filter("sql-type-dict"::equals).isPresent()) {
             discard();
@@ -405,46 +406,21 @@ public class RecordSchemaParser {
             }
 
             readSpaces();
-            Optional<String> handlerName = readJavaIdentifier();
+            Optional<JavaReferenceElement> typeReference = readJavaReference();
 
-            readSpaces();
-            Optional<JavaReferenceElement> typeReference = Optional.empty();
-            if (readSequence("[")) {
-                readSpaces();
-                typeReference = readJavaReference();
-
-                if (!typeReference.isPresent()) {
-                    throw parserException("Expecting a Java reference");
-                }
-
-                readSpaces();
-                if (!readSequence("]")) {
-                    throw parserException("Expecting a \"]\"");
-                }
+            if (!typeReference.isPresent()) {
+                throw parserException("Expecting a Java reference");
             }
 
-            List<SqlTypePatternElement> patterns = new LinkedList<>();
+            Optional<String> handlerName;
 
+            fork();
             readSpaces();
-            if (readSequence("(")) {
-                readSpaces();
-                Optional<SqlTypePatternElement> pattern = readSqlTypePattern();
-                while (pattern.isPresent()) {
-                    patterns.add(pattern.get());
-
-                    readSpaces();
-                    if (!readSequence(",")) {
-                        break;
-                    }
-
-                    readSpaces();
-                    pattern = readSqlTypePattern();
-                }
-
-                readSpaces();
-                if (!readSequence(")")) {
-                    throw parserException("Expecting a \")\"");
-                }
+            handlerName = readTypeName();
+            if (handlerName.isPresent()) {
+                merge();
+            } else {
+                discard();
             }
 
             readSpaces();
@@ -454,8 +430,7 @@ public class RecordSchemaParser {
 
             items.add(new SqlTypeDictionaryItemElement(
                     handlerName.orElse(null),
-                    typeReference.orElse(null),
-                    patterns
+                    typeReference.get()
             ));
         } while (true);
 
@@ -463,131 +438,6 @@ public class RecordSchemaParser {
                 name.get(),
                 items
         ));
-    }
-
-    private Optional<SqlTypePatternElement> readSqlTypePattern() throws IOException, ParserException {
-        Optional<List<String>> typeRoot = readSqlWords();
-
-        if (!typeRoot.isPresent()) {
-            return Optional.empty();
-        }
-
-        fork();
-        readSpaces();
-        if (!readSequence("{")) {
-            discard();
-
-            return Optional.of(new SqlTypePatternElement(typeRoot.get()));
-        }
-
-        merge();
-
-        HashMap<String, Object> properties = new HashMap<>();
-
-        readSpaces();
-        for (; ; ) {
-            Optional<String> key = readName();
-
-            if (!key.isPresent()) {
-                break;
-            }
-
-            readSpaces();
-            if (!readSequence(":")) {
-                throw parserException("Expecting a \":\"");
-            }
-
-            readSpaces();
-            Optional<String> value = readStrings();
-
-            if (!value.isPresent()) {
-                throw parserException("Expecting a string");
-            }
-
-            properties.put(key.get(), value.get());
-        }
-
-        readSpaces();
-        if (!readSequence("}")) {
-            throw parserException("Expecting a \"}\"");
-        }
-
-        return Optional.of(new SqlTypePatternElement(
-                typeRoot.get(),
-                properties
-        ));
-    }
-
-    private Optional<SqlTypeElement> readSqlType() throws IOException, ParserException {
-        Optional<List<String>> sqlTypeRoot = readSqlWords();
-
-        if (!sqlTypeRoot.isPresent()) {
-            return Optional.empty();
-        }
-
-        List<Integer> precision = null;
-
-        fork();
-        readSpaces();
-        if (readSequence("(")) {
-            merge();
-
-            precision = new LinkedList<>();
-
-            for (; ; ) {
-                readSpaces();
-                Optional<Long> p = readNumberAsLong();
-
-                if (p.isPresent()) {
-                    precision.add((int) (long) p.get());
-
-                    readSpaces();
-                    if (!readSequence(",")) {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            readSpaces();
-            if (!readSequence(")")) {
-                throw parserException("Expecting \")\" as the end of a precision specifier");
-            }
-        } else {
-            discard();
-        }
-
-        return Optional.of(new SqlTypeElement(
-                sqlTypeRoot.get(),
-                precision
-        ));
-    }
-
-    private Optional<List<String>> readSqlWords() throws IOException {
-        LinkedList<String> sqlTypeRoot = new LinkedList<>();
-
-        Optional<String> word = readSqlWord();
-        if (!word.isPresent()) {
-            return Optional.empty();
-        }
-
-        for (; ; ) {
-            sqlTypeRoot.add(word.get());
-
-            fork();
-            readSpaces();
-            word = readSqlWord();
-
-            if (word.isPresent()) {
-                merge();
-            } else {
-                discard();
-                break;
-            }
-        }
-
-        return Optional.of(sqlTypeRoot);
     }
 
     private Optional<JavaReferenceElement> readJavaReference() throws IOException, ParserException {
@@ -705,6 +555,14 @@ public class RecordSchemaParser {
         );
     }
 
+    private Optional<String> readTypeName() throws IOException {
+        return readSymbol(
+                Character::isAlphabetic,
+                ch -> Character.isAlphabetic(ch) || Character.isDigit(ch) || ch == '_'
+        )
+                .map(String::toLowerCase);
+    }
+
     private Optional<String> readJavaIdentifier() throws IOException {
         return readSymbol(Character::isJavaIdentifierStart, Character::isJavaIdentifierPart);
     }
@@ -717,25 +575,6 @@ public class RecordSchemaParser {
         }
 
         return value;
-    }
-
-    private Optional<Long> readNumberAsLong() throws IOException {
-        return readNumber()
-                .map(s -> {
-                    long value;
-
-                    if ("0".equals(s)) {
-                        value = 0L;
-                    } else if (s.startsWith("0x")) {
-                        value = Long.parseLong(s.substring(2));
-                    } else if (s.startsWith("0")) {
-                        value = Long.parseLong(s.substring(1), 8);
-                    } else {
-                        value = Long.parseLong(s);
-                    }
-
-                    return value;
-                });
     }
 
     Optional<String> readNumber() throws IOException {

@@ -220,10 +220,10 @@ public class RecordSchemaParserTest {
 
         assertEquals(Optional.of(new ColumnElement(
                 "id",
-                new SqlTypeElement(
+                new SqlPrimitiveTypeElement(
                         Collections.singletonList("BIGINT")
-                )
-        )), parser.readSqlTupleColumn());
+                ),
+                typeHandlerName)), parser.readSqlTupleColumn());
     }
 
     @Test
@@ -234,11 +234,11 @@ public class RecordSchemaParserTest {
 
         assertEquals(Optional.of(new ColumnElement(
                 "amount",
-                new SqlTypeElement(
+                new SqlPrimitiveTypeElement(
                         Collections.singletonList("DECIMAL"),
                         Arrays.asList(22, 2)
-                )
-        )), parser.readSqlTupleColumn());
+                ),
+                typeHandlerName)), parser.readSqlTupleColumn());
     }
 
     @Test
@@ -258,30 +258,30 @@ public class RecordSchemaParserTest {
                         Arrays.asList(
                                 new ColumnElement(
                                         "id",
-                                        new SqlTypeElement(
+                                        new SqlPrimitiveTypeElement(
                                                 Collections.singletonList("BIGINT")
-                                        )
-                                ),
+                                        ),
+                                        typeHandlerName),
                                 new ColumnElement(
                                         "amount",
-                                        new SqlTypeElement(
+                                        new SqlPrimitiveTypeElement(
                                                 Collections.singletonList("DECIMAL"),
                                                 Arrays.asList(22, 2)
-                                        )
-                                ),
+                                        ),
+                                        typeHandlerName),
                                 new ColumnElement(
                                         "modification",
-                                        new SqlTypeElement(
+                                        new SqlPrimitiveTypeElement(
                                                 Arrays.asList("TIMESTAMP", "WITH", "TIME", "ZONE"),
                                                 Collections.singletonList(6)
-                                        )
-                                ),
+                                        ),
+                                        typeHandlerName),
                                 new ColumnElement(
                                         "a very \"SpEcIaL\" column",
-                                        new SqlTypeElement(
+                                        new SqlPrimitiveTypeElement(
                                                 Collections.singletonList("TEXT")
-                                        )
-                                )
+                                        ),
+                                        typeHandlerName)
                         )
                 )
         ), parser.readSqlTuple());

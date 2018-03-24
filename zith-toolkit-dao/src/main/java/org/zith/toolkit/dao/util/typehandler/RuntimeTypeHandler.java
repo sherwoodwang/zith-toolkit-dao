@@ -1,12 +1,12 @@
 package org.zith.toolkit.dao.util.typehandler;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.zith.toolkit.dao.support.DaoSqlOperationContext;
 import org.zith.toolkit.dao.support.DaoSqlTypeHandler;
 
-import java.math.BigDecimal;
-import java.sql.CallableStatement;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
+import java.util.Objects;
 
 public class RuntimeTypeHandler<T> implements DaoSqlTypeHandler<T> {
     private final String sqlType;
@@ -14,7 +14,7 @@ public class RuntimeTypeHandler<T> implements DaoSqlTypeHandler<T> {
     private final Class<T> type;
 
     public RuntimeTypeHandler(String sqlType, int jdbcType, Class<T> type) {
-        this.sqlType = sqlType;
+        this.sqlType = Objects.requireNonNull(sqlType);
         this.jdbcType = jdbcType;
         this.type = type;
     }
@@ -34,61 +34,65 @@ public class RuntimeTypeHandler<T> implements DaoSqlTypeHandler<T> {
         return jdbcType;
     }
 
+    @Nullable
     @Override
-    public T load(ResultSet resultSet, int columnIndex) throws SQLException {
+    public T load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, int columnIndex) throws SQLException {
         return resultSet.getObject(columnIndex, type);
     }
 
+    @Nullable
     @Override
-    public T load(ResultSet resultSet, String columnName) throws SQLException {
+    public T load(@Nullable DaoSqlOperationContext context, @NotNull ResultSet resultSet, @NotNull String columnName) throws SQLException {
         return resultSet.getObject(columnName, type);
     }
 
+    @Nullable
     @Override
-    public T load(CallableStatement callableStatement, int columnIndex) throws SQLException {
+    public T load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int columnIndex) throws SQLException {
         return callableStatement.getObject(columnIndex, type);
     }
 
+    @Nullable
     @Override
-    public T load(CallableStatement callableStatement, String columnName) throws SQLException {
+    public T load(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String columnName) throws SQLException {
         return callableStatement.getObject(columnName, type);
     }
 
     @Override
-    public void store(PreparedStatement preparedStatement, int parameterIndex, T value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull PreparedStatement preparedStatement, int parameterIndex, @Nullable T value) throws SQLException {
         if (value == null) {
             preparedStatement.setNull(parameterIndex, getJdbcType(), getSqlType());
         } else {
-            preparedStatement.setObject(parameterIndex, value);
+            preparedStatement.setObject(parameterIndex, value, getJdbcType());
         }
     }
 
     @Override
-    public void store(CallableStatement callableStatement, int parameterIndex, T value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, int parameterIndex, @Nullable T value) throws SQLException {
         if (value == null) {
             callableStatement.setNull(parameterIndex, getJdbcType(), getSqlType());
         } else {
-            callableStatement.setObject(parameterIndex, value);
+            callableStatement.setObject(parameterIndex, value, getJdbcType());
         }
 
     }
 
     @Override
-    public void store(CallableStatement callableStatement, String parameterName, T value) throws SQLException {
+    public void store(@Nullable DaoSqlOperationContext context, @NotNull CallableStatement callableStatement, @NotNull String parameterName, @Nullable T value) throws SQLException {
         if (value == null) {
             callableStatement.setNull(parameterName, getJdbcType(), getSqlType());
         } else {
-            callableStatement.setObject(parameterName, value);
+            callableStatement.setObject(parameterName, value, getJdbcType());
         }
     }
 
     @Override
-    public Object convertToNativeValue(T value) {
+    public Object convertToNativeValue(@Nullable DaoSqlOperationContext context, Connection connection, T value) {
         return value;
     }
 
     @Override
-    public T convertFromNativeValue(Object value) {
+    public T convertFromNativeValue(@Nullable DaoSqlOperationContext context, Object value) {
         return type.cast(value);
     }
 }

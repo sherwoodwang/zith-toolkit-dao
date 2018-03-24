@@ -1,21 +1,25 @@
 package org.zith.toolkit.dao.build.generator;
 
+import com.google.common.base.CaseFormat;
+import com.google.common.base.Converter;
 import com.squareup.javapoet.*;
-import org.zith.toolkit.dao.build.data.SqlTypeHandlerDeclaration;
 import org.zith.toolkit.dao.build.data.SqlTypeDictionaryDefinition;
+import org.zith.toolkit.dao.build.data.SqlTypeHandlerDeclaration;
 import org.zith.toolkit.dao.support.DaoSqlTypeHandler;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.lang.model.element.Modifier;
 
 @NotThreadSafe
-class TypeHandlerDictionaryClassGenerator {
+class TypeDictionaryClassGenerator {
+    private static final Converter<String, String> HANDLER_NAME_CONVERTER =
+            CaseFormat.LOWER_UNDERSCORE.converterTo(CaseFormat.UPPER_CAMEL);
 
     private final SqlTypeDictionaryDefinition dictionaryDefinition;
     private ClassName selfClassName;
     private TypeSpec.Builder typeSpecBuilder;
 
-    TypeHandlerDictionaryClassGenerator(SqlTypeDictionaryDefinition dictionaryDefinition) {
+    TypeDictionaryClassGenerator(SqlTypeDictionaryDefinition dictionaryDefinition) {
         this.dictionaryDefinition = dictionaryDefinition;
     }
 
@@ -31,10 +35,8 @@ class TypeHandlerDictionaryClassGenerator {
     private void generateMethods() {
         for (SqlTypeHandlerDeclaration handlerDeclaration : dictionaryDefinition.getSqlTypeHandlerDeclarations()) {
             typeSpecBuilder.addMethod(
-                    MethodSpec.methodBuilder("handlerOf" + handlerDeclaration.getName())
+                    MethodSpec.methodBuilder(handlerGetterName(handlerDeclaration))
                             .addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
-                            .addParameter(String.class, "sqlType")
-                            .addParameter(TypeName.INT, "jdbcType")
                             .returns(ParameterizedTypeName.get(
                                     ClassName.get(DaoSqlTypeHandler.class),
                                     ClassName.bestGuess(handlerDeclaration.getType())
@@ -42,5 +44,9 @@ class TypeHandlerDictionaryClassGenerator {
                             .build()
             );
         }
+    }
+
+    static String handlerGetterName(SqlTypeHandlerDeclaration handlerDeclaration) {
+        return "handlerOf" + HANDLER_NAME_CONVERTER.convert(handlerDeclaration.getName());
     }
 }

@@ -10,23 +10,37 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Modifier;
 import java.util.*;
+import java.util.function.UnaryOperator;
 
 @NotThreadSafe
-class RecordClassGenerator {
-    private final RecordDefinition recordDefinition;
+public class RecordClassGenerator {
+    private RecordDefinition recordDefinition;
     private ClassName selfClassName;
     private TypeSpec.Builder typeSpecBuilder;
     private List<FieldDescriptor> fieldDescriptors;
+    private Map<String, FieldDescriptor> fieldDescriptorMap;
 
-    RecordClassGenerator(RecordDefinition recordDefinition) {
-        this.recordDefinition = recordDefinition;
+    @SuppressWarnings("WeakerAccess")
+    public RecordClassGenerator() {
     }
 
-    JavaFile generate() {
+    public final JavaFile generate(RecordDefinition recordDefinition) {
+        return generateFromRecord(recordDefinition);
+    }
+
+    JavaFile generateFromRecord(RecordDefinition recordDefinition) {
+        this.recordDefinition = recordDefinition;
         selfClassName = ClassName.get(recordDefinition.getPackageName(), recordDefinition.getName());
         typeSpecBuilder = TypeSpec.classBuilder(selfClassName).addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+        fieldDescriptors = recordDefinition.getFields().stream()
+                .map(FieldDescriptor::new)
+                .collect(ImmutableList.toImmutableList());
+        fieldDescriptorMap = fieldDescriptors.stream()
+                .collect(ImmutableMap.toImmutableMap(
+                        f -> f.getFieldDefinition().getFieldName(),
+                        UnaryOperator.identity()
+                ));
 
-        createFieldStates(recordDefinition);
         generateMemberFields();
         generateDefaultConstructor();
         generateCopyConstructor();
@@ -41,18 +55,19 @@ class RecordClassGenerator {
         return JavaFile.builder(selfClassName.packageName(), typeSpecBuilder.build()).build();
     }
 
+    @SuppressWarnings("WeakerAccess")
     protected final ClassName getSelfClassName() {
         return selfClassName;
     }
 
+    @SuppressWarnings("WeakerAccess")
     protected final TypeSpec.Builder getTypeSpecBuilder() {
         return typeSpecBuilder;
     }
 
-    private void createFieldStates(RecordDefinition recordDefinition) {
-        fieldDescriptors = recordDefinition.getFields().stream()
-                .map(FieldDescriptor::new)
-                .collect(ImmutableList.toImmutableList());
+    @SuppressWarnings("WeakerAccess")
+    protected final FieldDescriptor getFieldDescriptor(String fieldName) {
+        return fieldDescriptorMap.get(fieldName);
     }
 
     private void generateMemberFields() {
@@ -380,10 +395,10 @@ class RecordClassGenerator {
         return name;
     }
 
-    protected static class FieldDescriptor {
+    protected static final class FieldDescriptor {
 
         private final FieldDefinition fieldDefinition;
-        private final ClassName typeName;
+        private final TypeName typeName;
 
         FieldDescriptor(FieldDefinition fieldDefinition) {
             this.fieldDefinition = fieldDefinition;
@@ -394,7 +409,7 @@ class RecordClassGenerator {
             return fieldDefinition;
         }
 
-        public ClassName getTypeName() {
+        public TypeName getTypeName() {
             return typeName;
         }
     }
